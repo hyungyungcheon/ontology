@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}동작 원리{% endblock %}
+{% block content %}
+
+<section class="panel">
+  <h1>동작 원리</h1>
+  <p class="lede">이 프로젝트가 온톨로지/OWL reasoner를 어떻게 쓰는지, 그리고 왜 그렇게 설계했는지 상세히 설명합니다.</p>
+
+  <h2>1. 온톨로지 구조</h2>
+  <p><code>src/build_ontology.py</code>에서 owlready2로 다음을 정의합니다.</p>
+  <ul>
+    <li><strong>클래스 계층</strong>: <code>Ingredient</code> 아래 <code>Vegetable</code>, <code>Meat</code>, <code>Seafood</code>, <code>Dairy</code>, <code>Egg</code>, <code>Grain</code>, <code>Seasoning</code>, <code>Legume</code>. <code>Recipe</code>는 별도 루트.</li>
+    <li><strong>object property</strong>: <code>requiresIngredient</code> (Recipe → Ingredient), <code>substitutableWith</code> (Ingredient ↔ Ingredient, symmetric)</li>
+    <li><strong>disjoint classes</strong>: 8개 재료 서브클래스는 서로 겹칠 수 없다고 선언 (<code>AllDisjoint</code>) - 한 재료가 동시에 Meat이면서 Dairy일 수 없다는 뜻이면서, 뒤에 나올 negation 추론의 전제 조건이기도 합니다.</li>
+  </ul>
+
+  <h2>2. equivalent class와 open-world assumption</h2>
+  <pre><code>class VeganRecipe(Recipe):
+    equivalent_to = [
+        Recipe & requiresIngredient.only(Not(Meat) & Not(Seafood) & Not(Dairy) & Not(Egg))
+    ]
+
+class DairyFreeRecipe(Recipe):
+    equivalent_to = [Recipe & requiresIngredient.only(Not(Dairy))]</code></pre>
+  <p>
+    <code>some</code>(존재 한정) 대신 <code>only</code>(전칭 한정, allValuesFrom)를 쓴 이유가 중요합니다. OWL은
+    open-world assumption을 따르기 때문에 <code>Not(requiresIngredient.some(Meat))</code>처럼 "고기 재료가
+    있다는 게 증명되지 않았다"는 것만으로는 "고기 재료가 없다"를 확정할 수 없습니다. 반대로
+    <code>requiresIngredient.only(...)</code>는 "이미 선언된 모든 requiresIngredient 관계 각각"에 대해서만
+    조건을 검사하므로, 각 재료의 클래스와 disjoint 관계가 알려져 있는 한 reasoner가 확정적으로 판정할 수
+    있습니다.
+  </p>
+
+  <h2>3. reasoner가 실제로 한 일: TBox 추론</h2>
+  <p>
+    <code>sync_reasoner()</code>(HermiT)를 실행하면, 우리가 직접 선언한 적 없는 다음 관계를 reasoner가
+    스스로 찾아냅니다.
+  </p>
+  <pre><code>* Owlready * Reparenting fridge_ontology.VeganRecipe:
+    {fridge_ontology.Recipe} => {fridge_ontology.DairyFreeRecipe}</code></pre>
+  <p>
+    즉 "VeganRecipe이면 항상 DairyFreeRecipe이기도 하다"는 것을 HermiT이 두 클래스의 <code>equivalent_to</code>
+    정의를 비교해서 도출한 것입니다. 이건 진짜 description logic 추론이고, <code>/graph</code> 페이지의
+    클래스 트리에서 VeganRecipe가 DairyFreeRecipe 밑에 중첩된 것으로 직접 확인할 수 있습니다.
+  </p>
+
+  <h2>4. ABox(개체) 자동분류를 시도했다가 접은 이유</h2>
+  <p>
+    원래 의도는 "어떤 요리가 비건이다"라는 태그를 요리 <em>개체</em>에 reasoner가 자동으로 붙여주는 것까지
+    보여주는 것이었습니다 (Protégé의 유명한 피자 온톨로지 데모처럼). 실제로 시도해보니:
+  </p>
+  <ul>
+    <li>owlready2가 번들한 <strong>HermiT CLI는 <code>-c</code>(classify), <code>-O</code>/<code>-D</code>(property 분류)만
+      지원하고, 개체를 realize하는 옵션 자체가 없습니다</strong> (<code>--help</code>로 직접 확인).</li>
+    <li><strong>Pellet</strong>(<code>sync_reasoner_pellet</code>)은 <code>pellet realize</code> 명령을 실제로 실행하긴
+      하지만, 번들된 jena/owlapi 조합(2013년대 버전)이 JDK 21에서는 클래스 파일 버전 오류로 아예 실행되지 않았고,
+      JDK 25로 올려서 겨우 실행에는 성공했지만 <code>VeganRecipe.instances()</code>가 항상 빈 리스트로
+      나왔습니다. 가장 단순한 최소 재현(재료 1개짜리 온톨로지)에서도 동일하게 실패해서, restriction이
+      owlready2 → N-Triples → Pellet의 Jena 로더 경로를 거치며 유실되는 것으로 추정하고 있습니다.</li>
+  </ul>
+  <p>
+    그래서 최종 설계는: <strong>TBox(클래스-클래스 관계)는 진짜 reasoner 결과</strong>를 보여주고,
+    <strong>ABox(요리별 비건/유제품프리 태그)는 <code>src/reasoner.py</code>의 <code>get_recipe_tags()</code>가
+    같은 조건을 Python으로 직접 평가</strong>합니다. 이 삽질 자체가 좋은 교훈입니다: OWL 툴체인은 스키마 추론과
+    개체 추론의 성숙도/유지보수 상태가 reasoner마다 크게 다릅니다.
+  </p>
+
+  <h2>5. 대체 재료 그래프 탐색</h2>
+  <p>
+    "지금 있는 재료로 만들 수 있는 요리"는 OWL reasoner가 아니라 <code>find_makeable_recipes()</code>가
+    순수 Python으로 계산합니다. 각 요리가 필요로 하는 재료마다: (1) 냉장고에 직접 있으면 충족, (2) 없지만
+    <code>substitutableWith</code>로 연결된 대체재가 냉장고에 있으면 대체 충족, (3) 둘 다 아니면 부족.
+    대체재 추론까지 OWL 레벨(SWRL 규칙)로 올리는 건 난이도가 확 올라가서 의도적으로 분리했습니다.
+  </p>
+
+  <h2>6. 웹 앱 아키텍처</h2>
+  <pre><code>브라우저
+  │
+  ├─ GET/POST /            index.html   재료 체크 → 추천 결과
+  ├─ GET      /graph        graph.html   클래스 트리(서버 렌더) + 개체 그래프(JS)
+  ├─ GET      /api/graph    JSON         graph_export.build_instance_graph()
+  ├─ GET      /ontology.owl RDF/XML      onto.save() 결과 다운로드
+  ├─ GET      /plan          plan.html
+  └─ GET      /how-it-works  이 페이지
+
+Flask 프로세스 시작 시 1회:
+  build_ontology() → sync_reasoner() → 캐싱 (src/ontology_service.py)
+  (Java/HermiT 서브프로세스 재기동 비용을 요청마다 지불하지 않기 위함)
+
+요청마다:
+  find_makeable_recipes() / get_recipe_tags() 만 재계산 (순수 Python, 빠름)</code></pre>
+
+  <h2>7. 개체 그래프를 그리는 방법</h2>
+  <p>
+    <code>/graph</code>의 오른쪽 그래프는 D3 같은 외부 라이브러리 없이 <code>static/js/graph.js</code>가
+    <code>/api/graph</code>에서 받은 JSON을 가지고 순수 SVG로 그립니다. 재료(카테고리별 그룹)와 요리를
+    두 열로 고정 배치하고, <code>requiresIngredient</code>는 실선, <code>substitutableWith</code>는 점선,
+    Python이 계산한 <code>classified_as</code>(Vegan/DairyFree 태그)는 별도 색의 가상 엣지로 그립니다.
+    노드가 27개 정도라 물리 시뮬레이션 없이도 충분히 읽기 좋고, 인터넷 연결 없이도(CDN 의존성 없이) 항상
+    동작합니다.
+  </p>
+</section>
+
+{% endblock %}

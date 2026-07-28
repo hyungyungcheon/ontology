@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}냉장고 온톨로지{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">냉장고 온톨로지</div>
+    <nav>
+      <a href="{{ url_for('index') }}" class="{{ 'active' if request.endpoint == 'index' else '' }}">홈</a>
+      <a href="{{ url_for('graph') }}" class="{{ 'active' if request.endpoint == 'graph' else '' }}">온톨로지 그래프</a>
+      <a href="{{ url_for('plan') }}" class="{{ 'active' if request.endpoint == 'plan' else '' }}">계획</a>
+      <a href="{{ url_for('how_it_works') }}" class="{{ 'active' if request.endpoint == 'how_it_works' else '' }}">동작 원리</a>
+    </nav>
+  </header>
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

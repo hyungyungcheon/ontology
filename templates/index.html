@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}홈 - 냉장고 온톨로지{% endblock %}
+{% block content %}
+
+<section class="panel">
+  <h1>냉장고 재료 추천</h1>
+  <p class="lede">냉장고에 있는 재료를 체크하고 추천받기를 누르세요. 온톨로지 + OWL reasoner(HermiT)로 만든 데모입니다.</p>
+
+  {% if reasoner_error %}
+    <div class="notice warning">
+      <strong>OWL reasoner를 실행하지 못했습니다:</strong> {{ reasoner_error }}
+      <br>재료 추천 자체는 계속 동작하지만, 아래 "reasoner가 추론한 클래스 관계"는 표시되지 않습니다.
+    </div>
+  {% endif %}
+
+  <div class="notice">
+    <strong>OWL reasoner가 추론한 클래스 관계 (TBox)</strong>
+    {% if subsumption_facts %}
+      <ul>
+        {% for fact in subsumption_facts %}<li>{{ fact }}</li>{% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">(reasoner를 사용할 수 없어 표시할 내용이 없습니다.)</p>
+    {% endif %}
+  </div>
+
+  <form method="post" class="fridge-form">
+    <div class="text-input-row">
+      <label for="fridge-text">재료를 쉼표로 구분해서 입력 (CLI와 동일한 방식)</label>
+      <input type="text" id="fridge-text" placeholder="예: 두부, 간장, 대파, 참기름, 식용유" autocomplete="off">
+      <p class="muted">여기에 입력하면 아래 체크박스가 같이 반영되고, 체크박스를 눌러도 이 입력창이 같이 채워집니다.</p>
+    </div>
+    {% for category, items in ingredient_groups.items() %}
+      <fieldset>
+        <legend>{{ category }}</legend>
+        {% for ingredient_id, label in items %}
+          <label class="checkbox">
+            <input type="checkbox" name="ingredients" value="{{ ingredient_id }}"
+                   {{ 'checked' if ingredient_id in selected_ids else '' }}>
+            {{ label }}
+          </label>
+        {% endfor %}
+      </fieldset>
+    {% endfor %}
+    <button type="submit">추천받기</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>요리별 분류 태그</h2>
+  <p class="muted">재료 클래스를 보고 Python이 직접 판정한 결과입니다 (이유는 <a href="{{ url_for('how_it_works') }}">동작 원리</a> 참고).</p>
+  <ul class="recipe-tags">
+    {% for recipe_id, (label, required_ids) in recipes.items() %}
+      <li>
+        <strong>{{ label }}</strong>
+        {% for tag in recipe_tags[recipe_id] %}<span class="tag tag-{{ tag }}">{{ tag }}</span>{% endfor %}
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+
+{% if results %}
+<section class="panel">
+  <h2>추천 결과</h2>
+
+  <h3>바로 만들 수 있는 요리</h3>
+  {% if results.direct %}
+    <ul>{% for rid in results.direct %}<li>{{ recipes[rid][0] }}</li>{% endfor %}</ul>
+  {% else %}<p class="muted">없음</p>{% endif %}
+
+  <h3>대체 재료로 만들 수 있는 요리</h3>
+  {% if results.substitute %}
+    <ul>
+      {% for rid, subs in results.substitute %}
+        <li>{{ recipes[rid][0] }}
+          <span class="muted">
+            ({% for orig, sub in subs.items() %}{{ ingredients[orig][1] }} → {{ ingredients[sub][1] }}{{ ", " if not loop.last else "" }}{% endfor %})
+          </span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}<p class="muted">없음</p>{% endif %}
+
+  <h3>재료가 부족한 요리</h3>
+  {% if results.missing %}
+    <ul>
+      {% for rid, missing in results.missing %}
+        <li>{{ recipes[rid][0] }}
+          <span class="muted">(부족: {% for m in missing %}{{ ingredients[m][1] }}{{ ", " if not loop.last else "" }}{% endfor %})</span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}<p class="muted">없음</p>{% endif %}
+</section>
+{% endif %}
+
+<script>window.INGREDIENTS_DATA = {{ ingredients | tojson }};</script>
+<script src="{{ url_for('static', filename='js/fridge.js') }}"></script>
+{% endblock %}

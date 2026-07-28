@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}계획{% endblock %}
+{% block content %}
+
+<section class="panel">
+  <h1>프로젝트 계획</h1>
+  <p class="lede">온톨로지 개념(클래스/개체/속성/제약/추론)을 실습으로 익히기 위한 학습 프로젝트의 진행 기록입니다.</p>
+
+  <h2>Phase 1 - CLI (완료)</h2>
+  <p>목표: "추론이 실제로 쓸모 있는 결과를 만드는" 경험을 주는 것. 냉장고 재료를 입력하면 어떤 요리를 만들 수 있는지 추천하는 CLI를 owlready2 + HermiT reasoner로 구현했다.</p>
+  <ul>
+    <li>클래스 계층, object property, disjoint class, equivalent class 정의</li>
+    <li><code>src/build_ontology.py</code>, <code>src/reasoner.py</code>, <code>src/cli.py</code>, <code>src/data.py</code></li>
+    <li>테스트 8개 전부 통과 (<code>tests/test_reasoner.py</code>)</li>
+  </ul>
+
+  <h2>Phase 1.5 - ABox 자동분류 시도와 한계 발견</h2>
+  <p>
+    원래는 "요리 개체가 reasoner에 의해 자동으로 VeganRecipe/DairyFreeRecipe에 편입되는" 모습을 보여주려 했다.
+    실제로 해보니 owlready2에 번들된 <strong>HermiT CLI는 개체 분류(realize)를 아예 노출하지 않았고</strong>,
+    <strong>Pellet은 실행은 되지만 restriction 기반 분류 결과가 항상 비어 있었다</strong>
+    (Jena 로더 경로에서 restriction이 유실되는 것으로 보임 - JDK 21로는 클래스 파일 버전 문제로 아예 실행도
+    안 됐고, JDK 25로 올려서 겨우 실행은 됐지만 여전히 결과가 비었다).
+  </p>
+  <p>
+    그래서 <strong>TBox 추론(클래스 간 관계)은 진짜 reasoner 결과를 보여주고</strong>, <strong>ABox 판정(요리별 태그)은
+    Python으로 직접 계산</strong>하는 것으로 방향을 정리했다. 자세한 내용은 <a href="{{ url_for('how_it_works') }}">동작 원리</a> 페이지 참고.
+  </p>
+
+  <h2>Phase 2 - 웹 UI + 그래프 뷰어 (현재)</h2>
+  <p>CLI만으로는 온톨로지 구조가 눈에 안 보인다는 한계가 있어 웹으로 확장했다.</p>
+  <ul>
+    <li>Flask 웹 앱 (<code>app.py</code>) - CLI와 같은 로직을 재사용, reasoner는 앱 시작 시 1회만 실행</li>
+    <li>온톨로지 클래스 계층 + 개체 지식그래프 뷰어 (<code>/graph</code>)</li>
+    <li>이 페이지 (<code>/plan</code>)와 동작 원리 설명 페이지 (<code>/how-it-works</code>)</li>
+    <li>.owl 파일 다운로드 - Protégé 등 외부 툴 연동</li>
+  </ul>
+
+  <h2>다음 단계 후보</h2>
+  <ul>
+    <li>SWRL 규칙으로 대체재 추론을 OWL 레벨로 올리기</li>
+    <li>Pellet/Jena 로더 이슈를 근본적으로 해결해서 진짜 ABox 자동분류 시연하기</li>
+    <li>더 많은 재료/요리로 온톨로지 확장, 더 복잡한 제약 추가</li>
+  </ul>
+</section>
+
+{% endblock %}

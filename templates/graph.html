@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}온톨로지 그래프{% endblock %}
+{% block content %}
+
+<section class="panel">
+  <h1>온톨로지 구조 / 지식그래프</h1>
+  <p class="lede">
+    왼쪽은 클래스 계층(TBox) - 실제 owlready2 온톨로지를 그대로 읽어와서 그린 것입니다.
+    오른쪽은 재료/요리 개체와 관계(ABox)를 그린 지식그래프입니다.
+  </p>
+  <p>
+    <a href="{{ url_for('ontology_owl') }}">.owl 파일 다운로드</a> — Protégé 같은 외부 온톨로지 편집기로 열어서 더 깊이 살펴볼 수 있습니다.
+  </p>
+</section>
+
+<section class="panel graph-layout">
+  <div class="class-tree">
+    <h2>클래스 계층 (TBox)</h2>
+    {% if reasoner_error %}
+      <p class="notice warning">reasoner를 사용할 수 없어 클래스 트리를 표시할 수 없습니다: {{ reasoner_error }}</p>
+    {% elif class_tree %}
+      {% macro render_node(node) %}
+        <li>
+          {{ node.name }}
+          {% if node.children %}
+            <ul>{% for child in node.children %}{{ render_node(child) }}{% endfor %}</ul>
+          {% endif %}
+        </li>
+      {% endmacro %}
+      <ul class="tree">
+        {% for root in class_tree %}{{ render_node(root) }}{% endfor %}
+      </ul>
+      <p class="muted">VeganRecipe가 DairyFreeRecipe 아래 중첩되어 있다면, reasoner가 두 클래스 정의를 비교해서 스스로 찾아낸 관계입니다.</p>
+    {% endif %}
+  </div>
+
+  <div class="instance-graph">
+    <h2>개체 그래프 (ABox)</h2>
+    <div class="legend">
+      <span><i class="swatch line-requires"></i> requiresIngredient</span>
+      <span><i class="swatch line-substitute"></i> substitutableWith</span>
+      <span><i class="swatch line-tag"></i> classified_as (Python 계산)</span>
+    </div>
+    <svg id="graph-svg" width="760" height="640"></svg>
+    <p class="muted">노드에 마우스를 올리면 연결된 관계가 강조됩니다.</p>
+  </div>
+</section>
+
+<script src="{{ url_for('static', filename='js/graph.js') }}"></script>
+{% endblock %}
